@@ -1,0 +1,20 @@
+replicaCount: 1
+
+image:
+  repository: 767398031518.dkr.ecr.us-east-1.amazonaws.com/metric-scraper
+  tag: latest
+  pullPolicy: IfNotPresent
+
+env:
+  SCRAPER_USER: "user"
+  SCRAPER_PASS: "pass"
+  AUTH_URL: "http://metric-pusher-service.namespace:8082/auth"  # Service endpoint of metric-pusher in other cluster
+  INGEST_URL: "http://metric-pusher-service.namespace:8082/ingest"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
