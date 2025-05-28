@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metric-scraper
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: metric-scraper
+  template:
+    metadata:
+      labels:
+        app: metric-scraper
+    spec:
+      containers:
+      - name: metric-scraper
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SCRAPER_USER
+          value: "{{ .Values.env.SCRAPER_USER }}"
+        - name: SCRAPER_PASS
+          value: "{{ .Values.env.SCRAPER_PASS }}"
+        - name: AUTH_URL
+          value: "{{ .Values.env.AUTH_URL }}"
+        - name: INGEST_URL
+          value: "{{ .Values.env.INGEST_URL }}"
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
