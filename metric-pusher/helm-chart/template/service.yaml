@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: metric-pusher
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: metric-pusher
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: 8082

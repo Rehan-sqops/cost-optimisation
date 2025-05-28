@@ -1,0 +1,20 @@
+replicaCount: 1
+
+image:
+  repository: 767398031518.dkr.ecr.us-east-1.amazonaws.com/metric-pusher
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8082
+
+env:
+  SCRAPER_USER: "user"
+  SCRAPER_PASS: "pass"
+  AUTH_SHARED_SECRET: "mysecret"
+  AUTH_STATIC_TOKEN: ""
+  CLICKHOUSE_HOST: "clickhouse-host.default.svc.cluster.local"
+  CLICKHOUSE_DB: "metrics"
+  CLICKHOUSE_USER: "default"
+  CLICKHOUSE_PASSWORD: ""
