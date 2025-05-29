@@ -3,25 +3,39 @@ from pydantic import BaseModel
 from jose import JWTError, jwt
 from clickhouse_driver import Client
 import os, time, datetime
+import uvicorn
 
 # ------------------------------------------------------------------
-# Environment / secrets
+# Default Environment / Secrets
 # ------------------------------------------------------------------
-JWT_SECRET        = os.getenv("AUTH_SHARED_SECRET")         # eg. a long random string
+JWT_SECRET        = os.getenv("AUTH_SHARED_SECRET", "my-secret-key")
 JWT_ALGORITHM     = "HS256"
-RAW_SHARED_TOKEN  = os.getenv("AUTH_STATIC_TOKEN")          # optional fallback
-CLICKHOUSE_HOST   = os.getenv("CLICKHOUSE_HOST", "clickhouse")
+RAW_SHARED_TOKEN  = os.getenv("AUTH_STATIC_TOKEN", "optional-static-token")
+CLICKHOUSE_HOST   = os.getenv("CLICKHOUSE_HOST", "127.0.0.1")
 CLICKHOUSE_DB     = os.getenv("CLICKHOUSE_DB", "metrics")
 CLICKHOUSE_USER   = os.getenv("CLICKHOUSE_USER", "default")
 CLICKHOUSE_PASS   = os.getenv("CLICKHOUSE_PASSWORD", "")
+SCRAPER_USER      = os.getenv("SCRAPER_USER", "user")
+SCRAPER_PASS      = os.getenv("SCRAPER_PASS", "pass")
+
+
+# Create the database if it doesn't exist
+ch_db_client = Client(
+    host=CLICKHOUSE_HOST,
+    user=CLICKHOUSE_USER,
+    password=CLICKHOUSE_PASS
+)
+ch_db_client.execute(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DB}")
 
 # ------------------------------------------------------------------
 # ClickHouse connection
 # ------------------------------------------------------------------
-ch = Client(host=CLICKHOUSE_HOST,
-            database=CLICKHOUSE_DB,
-            user=CLICKHOUSE_USER,
-            password=CLICKHOUSE_PASS)
+ch = Client(
+    host=CLICKHOUSE_HOST,
+    database=CLICKHOUSE_DB,
+    user=CLICKHOUSE_USER,
+    password=CLICKHOUSE_PASS
+)
 
 # Create table if it doesn’t exist
 ch.execute("""
@@ -74,7 +88,6 @@ def auth_guard(authorization: str = Header(...)):
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Bad auth header")
-    # Static-token path (optional)
     if RAW_SHARED_TOKEN and token == RAW_SHARED_TOKEN:
         return "static-client"
     return verify_jwt_token(token)
@@ -84,28 +97,27 @@ def auth_guard(authorization: str = Header(...)):
 # ------------------------------------------------------------------
 @app.post("/auth")
 def authenticate(req: AuthRequest):
-    # You can validate username/password however you like
-    if req.username != os.getenv("SCRAPER_USER") \
-       or req.password != os.getenv("SCRAPER_PASS"):
+    if req.username != SCRAPER_USER or req.password != SCRAPER_PASS:
         raise HTTPException(status_code=401, detail="Bad credentials")
 
-    exp = int(time.time()) + 60*60  # 1 h
+    exp = int(time.time()) + 60 * 60
     to_encode = {"sub": req.username, "exp": exp}
     token = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return {"access_token": token, "token_type": "bearer", "expires_in": 3600}
 
 @app.post("/ingest")
 def ingest(payload: MetricsPayload, client_id: str = Depends(auth_guard)):
-    # Transform records to ClickHouse rows
     rows = [
         (datetime.datetime.fromtimestamp(r.ts),
          r.cluster, r.node, r.namespace, r.pod, r.container,
          r.cpu_usage_sec, r.mem_usage_b)
         for r in payload.records
     ]
-    ch.execute(
-        "INSERT INTO container_metrics VALUES",
-        rows,
-        types_check=True,
-    )
+    ch.execute("INSERT INTO container_metrics VALUES", rows, types_check=True)
     return {"inserted": len(rows)}
+
+# ------------------------------------------------------------------
+# Main entry for python3 app.py
+# ------------------------------------------------------------------
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=8082, reload=False)
